@@ -544,23 +544,128 @@ with tab5:
 
         st.subheader("Explanation summary")
 
-        reasons = []
+        st.caption(
+            "This summary highlights visible inputs and model probability support. "
+            "It is not a diagnosis and does not claim that one factor caused the result."
+        )
 
-        if doctor_filled == 0:
-            reasons.append("No cognitive test or symptom fields were entered by the doctor yet.")
+        top_category = max(prob_dict, key=prob_dict.get)
+        top_probability = prob_dict[top_category]
+
+        st.write(
+            f"- The strongest model probability support was **{top_category}** "
+            f"at **{round(top_probability * 100, 2)}%**, which contributed to the **{priority}** review-priority result."
+        )
+
+        cognitive_inputs_used = []
+        cognitive_display = {
+            "MOCA_TOTAL": "MoCA",
+            "MMSE_TOTAL": "MMSE",
+            "CDR_GLOBAL": "CDR Global",
+            "CDR_SUM_OF_BOXES": "CDR Sum of Boxes",
+            "FAQ_TOTAL": "FAQ",
+            "ADAS_TOTSCORE": "ADAS total score",
+            "ADAS_TOTAL13": "ADAS-13",
+            "LOGICAL_MEMORY_TOTAL": "Logical Memory",
+            "AVLT_TOTAL": "AVLT total",
+            "AVLT_DELAY_30MIN": "AVLT 30-minute delay",
+            "TRAILS_A_SCORE": "Trails A",
+            "BNT_TOTAL": "Boston Naming Test",
+            "CLOCK_SCORE": "Clock score",
+            "COPY_SCORE": "Copy score",
+        }
+
+        for col, label in cognitive_display.items():
+            value = patient_row.get(col, np.nan)
+            if not is_missing_value(value):
+                cognitive_inputs_used.append(f"{label}: {value}")
+
+        if cognitive_inputs_used:
+            st.write("- Doctor-entered cognitive screening values used in the review:")
+            for item in cognitive_inputs_used[:8]:
+                st.write(f"  - {item}")
+            if len(cognitive_inputs_used) > 8:
+                st.write(f"  - and {len(cognitive_inputs_used) - 8} additional cognitive fields")
         else:
-            reasons.append("Doctor-entered cognitive/symptom fields were included in the review.")
+            st.write("- No doctor-entered cognitive screening values were available for this prediction.")
 
-        if auto_loaded > 0:
-            reasons.append("Auto-filled patient record, lab, or imaging data was included.")
+        visible_clinical_signals = []
+
+        def add_signal_if_numeric(col, label, direction):
+            value = patient_row.get(col, np.nan)
+            if not is_missing_value(value):
+                try:
+                    value = float(value)
+                    if direction == "lower" and value > 0:
+                        visible_clinical_signals.append(f"{label} value entered: {value}")
+                    elif direction == "higher" and value > 0:
+                        visible_clinical_signals.append(f"{label} value entered: {value}")
+                except Exception:
+                    pass
+
+        add_signal_if_numeric("MOCA_TOTAL", "MoCA", "lower")
+        add_signal_if_numeric("MMSE_TOTAL", "MMSE", "lower")
+        add_signal_if_numeric("CDR_GLOBAL", "CDR Global", "higher")
+        add_signal_if_numeric("CDR_SUM_OF_BOXES", "CDR Sum of Boxes", "higher")
+        add_signal_if_numeric("FAQ_TOTAL", "FAQ", "higher")
+
+        present_symptoms = []
+        for col, label in SYMPTOM_FEATURES.items():
+            if patient_row.get(col, np.nan) == "Present":
+                present_symptoms.append(label)
+
+        if present_symptoms:
+            visible_clinical_signals.append(
+                "Symptoms marked present: " + ", ".join(present_symptoms)
+            )
+
+        apoe4_status = patient_row.get("APOE4_STATUS", np.nan)
+        if not is_missing_value(apoe4_status):
+            visible_clinical_signals.append(f"APOE4 status included: {apoe4_status}")
+
+        if visible_clinical_signals:
+            st.write("- Visible clinical/background signals considered:")
+            for signal in visible_clinical_signals[:8]:
+                st.write(f"  - {signal}")
+
+        record_inputs_used = []
+        record_display = {
+            "Age": "Age",
+            "TOTAL_HIPP_VOL": "Total hippocampal volume",
+            "HIPP_VOL_ICV": "Hippocampal volume / ICV",
+            "WMH_TOTAL": "White matter hyperintensity total",
+            "FDG_METAROI_MEAN": "FDG meta-ROI mean",
+            "AMY_CENTILOIDS": "Amyloid centiloids",
+            "AMY_SUMMARY_SUVR": "Amyloid summary SUVR",
+            "TAU_META_TEMPORAL_SUVR": "Tau meta-temporal SUVR",
+            "PLASMA_PTAU217_F": "Plasma pTau217",
+            "CSF_ABETA42": "CSF ABeta42",
+            "CSF_TTAU": "CSF total tau",
+            "CSF_PTAU181": "CSF pTau181",
+        }
+
+        for col, label in record_display.items():
+            value = patient_row.get(col, np.nan)
+            if not is_missing_value(value):
+                record_inputs_used.append(f"{label}: {value}")
+
+        if record_inputs_used:
+            st.write("- Auto-filled patient record, imaging, or biomarker values used:")
+            for item in record_inputs_used[:8]:
+                st.write(f"  - {item}")
+            if len(record_inputs_used) > 8:
+                st.write(f"  - and {len(record_inputs_used) - 8} additional record fields")
+
+        if missing_doctor_cols:
+            st.write(
+                f"- Some doctor-entered fields were still missing "
+                f"({len(missing_doctor_cols)} fields), so the result should be interpreted with that context."
+            )
 
         if overall_completeness < 0.30:
-            reasons.append("Many model fields are missing, so confidence may be limited.")
+            st.write("- Many model fields were unavailable, so confidence may be limited.")
         else:
-            reasons.append("The model used the available fields and handled missing values automatically.")
-
-        for reason in reasons:
-            st.write("- " + reason)
+            st.write("- Missing values were handled by the preprocessing pipeline instead of being treated as zero.")
 
         st.info(
             "Suggested use: review the patient clinically, repeat cognitive screening if needed, "
