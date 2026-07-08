@@ -544,70 +544,45 @@ with tab5:
 
         st.subheader("Explanation summary")
 
-        st.caption(
-            "This summary highlights visible inputs and model probability support. "
-            "It is not a diagnosis and does not claim that one factor caused the result."
-        )
-
         top_category = max(prob_dict, key=prob_dict.get)
         top_probability = prob_dict[top_category]
 
         st.write(
-            f"- The strongest model probability support was **{top_category}** "
-            f"at **{round(top_probability * 100, 2)}%**, which contributed to the **{priority}** review-priority result."
+            f"The model showed strongest probability support for **{top_category}** "
+            f"(**{round(top_probability * 100, 2)}%**), so the case was assigned "
+            f"**{priority}** review priority."
         )
 
-        cognitive_inputs_used = []
-        cognitive_display = {
-            "MOCA_TOTAL": "MoCA",
-            "MMSE_TOTAL": "MMSE",
-            "CDR_GLOBAL": "CDR Global",
-            "CDR_SUM_OF_BOXES": "CDR Sum of Boxes",
-            "FAQ_TOTAL": "FAQ",
-            "ADAS_TOTSCORE": "ADAS total score",
-            "ADAS_TOTAL13": "ADAS-13",
-            "LOGICAL_MEMORY_TOTAL": "Logical Memory",
-            "AVLT_TOTAL": "AVLT total",
-            "AVLT_DELAY_30MIN": "AVLT 30-minute delay",
-            "TRAILS_A_SCORE": "Trails A",
-            "BNT_TOTAL": "Boston Naming Test",
-            "CLOCK_SCORE": "Clock score",
-            "COPY_SCORE": "Copy score",
-        }
+        summary_points = []
 
-        for col, label in cognitive_display.items():
-            value = patient_row.get(col, np.nan)
-            if not is_missing_value(value):
-                cognitive_inputs_used.append(f"{label}: {value}")
+        moca = patient_row.get("MOCA_TOTAL", np.nan)
+        mmse = patient_row.get("MMSE_TOTAL", np.nan)
+        cdr_global = patient_row.get("CDR_GLOBAL", np.nan)
+        cdr_sob = patient_row.get("CDR_SUM_OF_BOXES", np.nan)
+        faq = patient_row.get("FAQ_TOTAL", np.nan)
 
-        if cognitive_inputs_used:
-            st.write("- Doctor-entered cognitive screening values used in the review:")
-            for item in cognitive_inputs_used[:8]:
-                st.write(f"  - {item}")
-            if len(cognitive_inputs_used) > 8:
-                st.write(f"  - and {len(cognitive_inputs_used) - 8} additional cognitive fields")
+        cognitive_summary = []
+        if not is_missing_value(moca):
+            cognitive_summary.append(f"MoCA {moca}")
+        if not is_missing_value(mmse):
+            cognitive_summary.append(f"MMSE {mmse}")
+        if not is_missing_value(cdr_global):
+            cognitive_summary.append(f"CDR Global {cdr_global}")
+        if not is_missing_value(cdr_sob):
+            cognitive_summary.append(f"CDR-SB {cdr_sob}")
+        if not is_missing_value(faq):
+            cognitive_summary.append(f"FAQ {faq}")
+
+        if cognitive_summary:
+            summary_points.append(
+                "Cognitive screening values were available, including "
+                + ", ".join(cognitive_summary[:5])
+                + "."
+            )
         else:
-            st.write("- No doctor-entered cognitive screening values were available for this prediction.")
-
-        visible_clinical_signals = []
-
-        def add_signal_if_numeric(col, label, direction):
-            value = patient_row.get(col, np.nan)
-            if not is_missing_value(value):
-                try:
-                    value = float(value)
-                    if direction == "lower" and value > 0:
-                        visible_clinical_signals.append(f"{label} value entered: {value}")
-                    elif direction == "higher" and value > 0:
-                        visible_clinical_signals.append(f"{label} value entered: {value}")
-                except Exception:
-                    pass
-
-        add_signal_if_numeric("MOCA_TOTAL", "MoCA", "lower")
-        add_signal_if_numeric("MMSE_TOTAL", "MMSE", "lower")
-        add_signal_if_numeric("CDR_GLOBAL", "CDR Global", "higher")
-        add_signal_if_numeric("CDR_SUM_OF_BOXES", "CDR Sum of Boxes", "higher")
-        add_signal_if_numeric("FAQ_TOTAL", "FAQ", "higher")
+            summary_points.append(
+                "No cognitive screening values were entered, so the result relied more on available record data."
+            )
 
         present_symptoms = []
         for col, label in SYMPTOM_FEATURES.items():
@@ -615,57 +590,54 @@ with tab5:
                 present_symptoms.append(label)
 
         if present_symptoms:
-            visible_clinical_signals.append(
-                "Symptoms marked present: " + ", ".join(present_symptoms)
+            summary_points.append(
+                "Reported symptom concerns included "
+                + ", ".join(present_symptoms)
+                + "."
             )
+
+        background_signals = []
 
         apoe4_status = patient_row.get("APOE4_STATUS", np.nan)
         if not is_missing_value(apoe4_status):
-            visible_clinical_signals.append(f"APOE4 status included: {apoe4_status}")
+            background_signals.append(f"APOE4 status: {apoe4_status}")
 
-        if visible_clinical_signals:
-            st.write("- Visible clinical/background signals considered:")
-            for signal in visible_clinical_signals[:8]:
-                st.write(f"  - {signal}")
+        amyloid = patient_row.get("AMY_CENTILOIDS", np.nan)
+        if not is_missing_value(amyloid):
+            background_signals.append(f"amyloid centiloids: {amyloid}")
 
-        record_inputs_used = []
-        record_display = {
-            "Age": "Age",
-            "TOTAL_HIPP_VOL": "Total hippocampal volume",
-            "HIPP_VOL_ICV": "Hippocampal volume / ICV",
-            "WMH_TOTAL": "White matter hyperintensity total",
-            "FDG_METAROI_MEAN": "FDG meta-ROI mean",
-            "AMY_CENTILOIDS": "Amyloid centiloids",
-            "AMY_SUMMARY_SUVR": "Amyloid summary SUVR",
-            "TAU_META_TEMPORAL_SUVR": "Tau meta-temporal SUVR",
-            "PLASMA_PTAU217_F": "Plasma pTau217",
-            "CSF_ABETA42": "CSF ABeta42",
-            "CSF_TTAU": "CSF total tau",
-            "CSF_PTAU181": "CSF pTau181",
-        }
+        fdg = patient_row.get("FDG_METAROI_MEAN", np.nan)
+        if not is_missing_value(fdg):
+            background_signals.append(f"FDG meta-ROI: {fdg}")
 
-        for col, label in record_display.items():
-            value = patient_row.get(col, np.nan)
-            if not is_missing_value(value):
-                record_inputs_used.append(f"{label}: {value}")
+        hipp = patient_row.get("TOTAL_HIPP_VOL", np.nan)
+        if not is_missing_value(hipp):
+            background_signals.append(f"hippocampal volume: {hipp}")
 
-        if record_inputs_used:
-            st.write("- Auto-filled patient record, imaging, or biomarker values used:")
-            for item in record_inputs_used[:8]:
-                st.write(f"  - {item}")
-            if len(record_inputs_used) > 8:
-                st.write(f"  - and {len(record_inputs_used) - 8} additional record fields")
-
-        if missing_doctor_cols:
-            st.write(
-                f"- Some doctor-entered fields were still missing "
-                f"({len(missing_doctor_cols)} fields), so the result should be interpreted with that context."
+        if background_signals:
+            summary_points.append(
+                "Auto-filled record data also contributed, including "
+                + ", ".join(background_signals[:4])
+                + "."
             )
 
-        if overall_completeness < 0.30:
-            st.write("- Many model fields were unavailable, so confidence may be limited.")
-        else:
-            st.write("- Missing values were handled by the preprocessing pipeline instead of being treated as zero.")
+        if missing_doctor_cols:
+            summary_points.append(
+                f"{len(missing_doctor_cols)} doctor-entered fields were still missing, "
+                "so the output should be interpreted with clinical context."
+            )
+
+        summary_points.append(
+            "Missing values were handled by the preprocessing pipeline and were not treated as zero."
+        )
+
+        for point in summary_points:
+            st.write("- " + point)
+
+        st.caption(
+            "This explanation summarizes visible input patterns and probability support. "
+            "It is not a diagnosis and does not prove that any single factor caused the result."
+        )
 
         st.info(
             "Suggested use: review the patient clinically, repeat cognitive screening if needed, "
