@@ -639,9 +639,19 @@ with tab5:
             "It is not a diagnosis and does not prove that any single factor caused the result."
         )
 
-        st.info(
-            "Suggested use: review the patient clinically, repeat cognitive screening if needed, "
-            "and consider referral or additional tests only if clinically appropriate."
-        )
+        if priority == "GREEN":
+            st.success(
+                "Suggested use: continue routine clinical review. No urgent action is suggested by the MVP output, but the doctor should still consider patient context."
+            )
+
+        elif priority == "YELLOW":
+            st.warning(
+                "Suggested use: review the patient clinically, repeat cognitive screening if needed, complete missing information, and consider follow-up if clinically appropriate."
+            )
+
+        elif priority == "RED":
+            st.error(
+                "Suggested use: review the patient clinically, check available cognitive and biomarker information, and consider referral or additional tests only if clinically appropriate."
+            )
 
         st.warning("This output is a review-priority support signal, not a diagnosis.")
